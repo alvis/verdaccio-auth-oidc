@@ -1,0 +1,74 @@
+{
+  "name": "verdaccio-auth-oidc",
+  "version": "1.0.0",
+  "description": "Keyless CI publishing for Verdaccio — verify OIDC ID tokens from CI/CD platforms and map them to per-repository or organization-wide identities.",
+  "keywords": [
+    "verdaccio",
+    "verdaccio-plugin",
+    "verdaccio-middleware",
+    "auth",
+    "oidc",
+    "openid-connect",
+    "jwt",
+    "jwks",
+    "ci",
+    "github-actions",
+    "trusted-publishing"
+  ],
+  "homepage": "https://github.com/alvis/verdaccio-auth-oidc#readme",
+  "bugs": {
+    "url": "https://github.com/alvis/verdaccio-auth-oidc/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alvis/verdaccio-auth-oidc.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Alvis HT Tang",
+    "email": "alvis@hilbert.space"
+  },
+  "type": "module",
+  "imports": {
+    "#*": "./src/*.ts"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "lib/index.js",
+  "module": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "run build",
+    "lint": "run lint --",
+    "prepare": "run prepare",
+    "prepublishOnly": "run prepublishOnly",
+    "release": "run release --",
+    "test": "run test --",
+    "test:coverage": "run test:coverage --",
+    "test:watch": "run test:watch --"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@presetter/preset-esm": "^9.1.0",
+    "@presetter/preset-strict": "^9.1.0",
+    "@types/node": "^24.19.0",
+    "@vitest/coverage-v8": "^5.1.0",
+    "presetter": "^9.1.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.1.0"
+  },
+  "packageManager": "pnpm@11.14.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "publishConfig": {
+    "imports": {
+      "#*": "./lib/*.js"
+    }
+  }
+}

@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Setup pnpm and Node LTS
+        uses: pnpm/setup@v3
+        with:
+          runtime: node@lts
+      - name: Publish GitHub release
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "GitHub release $GITHUB_REF_NAME already exists"
+          else
+            release_notes_file="$RUNNER_TEMP/release-notes.md"
+            pnpm exec run release:notes -- --output "$release_notes_file"
+            gh release create "$GITHUB_REF_NAME" --verify-tag --notes-file "$release_notes_file"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release to npm
+        run: pnpm publish --access public --provenance --no-git-checks
