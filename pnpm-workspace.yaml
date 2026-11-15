@@ -1,3 +1,16 @@
+# no dependency needs its install script, so both are off; listing them keeps pnpm from warning about ignored builds
 allowBuilds:
-  esbuild: true
-  unrs-resolver: true
+  # only prints a funding message; comes from Verdaccio 6.1.0, an e2e test target
+  core-js: false
+  # only swaps in its native binary for faster startup, which works without it; comes from Vite under Vitest
+  esbuild: false
+
+# presetter v10 preview, installed from its release tarballs, which depend on each other by URL
+blockExoticSubdeps: false
+
+overrides:
+  presetter: https://github.com/alvis/presetter/releases/download/v10.0.0-alpha-2026-11-17-ecdaea6/presetter-alpha-ecdaea6.tgz
+  '@presetter/types': https://github.com/alvis/presetter/releases/download/v10.0.0-alpha-2026-11-17-ecdaea6/presetter-types-alpha-ecdaea6.tgz
+  '@presetter/preset-esm': https://github.com/alvis/presetter/releases/download/v10.0.0-alpha-2026-11-17-ecdaea6/presetter-preset-esm-alpha-ecdaea6.tgz
+  '@presetter/preset-essentials': https://github.com/alvis/presetter/releases/download/v10.0.0-alpha-2026-11-17-ecdaea6/presetter-preset-essentials-alpha-ecdaea6.tgz
+  '@presetter/preset-strict': https://github.com/alvis/presetter/releases/download/v10.0.0-alpha-2026-11-17-ecdaea6/presetter-preset-strict-alpha-ecdaea6.tgz
