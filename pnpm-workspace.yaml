@@ -1,3 +1,14 @@
+# no dependency needs its install script, so it is off; listing it keeps pnpm from warning about an ignored build
 allowBuilds:
-  esbuild: true
-  unrs-resolver: true
+  # only swaps in its native binary for faster startup, which works without it; comes from Vite under Vitest
+  esbuild: false
+
+# presetter v10 preview, installed from its release tarballs, which depend on each other by URL
+blockExoticSubdeps: false
+
+overrides:
+  presetter: https://github.com/alvis/presetter/releases/download/v10.0.0-alpha-2026-11-17-ecdaea6/presetter-alpha-ecdaea6.tgz
+  '@presetter/types': https://github.com/alvis/presetter/releases/download/v10.0.0-alpha-2026-11-17-ecdaea6/presetter-types-alpha-ecdaea6.tgz
+  '@presetter/preset-esm': https://github.com/alvis/presetter/releases/download/v10.0.0-alpha-2026-11-17-ecdaea6/presetter-preset-esm-alpha-ecdaea6.tgz
+  '@presetter/preset-essentials': https://github.com/alvis/presetter/releases/download/v10.0.0-alpha-2026-11-17-ecdaea6/presetter-preset-essentials-alpha-ecdaea6.tgz
+  '@presetter/preset-strict': https://github.com/alvis/presetter/releases/download/v10.0.0-alpha-2026-11-17-ecdaea6/presetter-preset-strict-alpha-ecdaea6.tgz
