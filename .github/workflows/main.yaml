@@ -27,6 +27,6 @@ jobs:
       - name: Run test (unit)
         run: pnpm run test:coverage
       - name: Run test (e2e)
-        run: pnpm run --if-present test:e2e
+        run: pnpm run test:e2e
       - name: Run lint
         run: pnpm run lint
