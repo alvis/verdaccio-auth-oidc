@@ -5,7 +5,6 @@
   "keywords": [
     "verdaccio",
     "verdaccio-plugin",
-    "verdaccio-middleware",
     "auth",
     "oidc",
     "openid-connect",
@@ -50,6 +49,7 @@
     "release": "run release --",
     "test": "run test --",
     "test:coverage": "run test:coverage --",
+    "test:e2e": "run test:e2e --",
     "test:watch": "run test:watch --"
   },
   "dependencies": {
@@ -65,7 +65,14 @@
     "@vitest/coverage-v8": "^5.1.0",
     "presetter": "10.0.0-alpha-2026-11-17-ecdaea6",
     "typescript": "^5.9.0",
+    "verdaccio": "^7.1.0",
+    "verdaccio-6": "npm:verdaccio@^6.11.1",
+    "verdaccio-6.1.0": "npm:verdaccio@6.1.0",
+    "verdaccio-7.0.0": "npm:verdaccio@7.0.0",
     "vitest": "^5.1.0"
+  },
+  "peerDependencies": {
+    "verdaccio": "^6.1.0 || ^7.0.0"
   },
   "packageManager": "pnpm@11.14.0",
   "engines": {

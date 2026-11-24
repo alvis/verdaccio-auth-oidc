@@ -15,8 +15,6 @@ _Verifies tokens against each issuer's public JWKS and maps verified claims to p
 
 </div>
 
-> 🚧 **Under construction.** This package is scaffolded but not implemented yet. The configuration and behavior below describe the planned design and may change before the first release.
-
 ---
 
 ## ⚡ Quick Start
@@ -30,11 +28,13 @@ pnpm add verdaccio-auth-oidc
 yarn add verdaccio-auth-oidc
 ```
 
-Register the plugin under `middlewares:` in Verdaccio's `config.yaml`, ahead of any other middleware that reads `req.remote_user`:
+Register the plugin under `auth:` in Verdaccio's `config.yaml`, beside the auth plugin you already use:
 
 ```yaml
-middlewares:
-  'verdaccio-auth-oidc':
+auth:
+  htpasswd:
+    file: ./htpasswd
+  auth-oidc: # loads the verdaccio-auth-oidc package
     issuers:
       - id: github-actions
         issuer: https://token.actions.githubusercontent.com
@@ -102,7 +102,7 @@ verdaccio-auth-oidc lets the CI platform vouch for the job instead:
 - **🏷️ Repository or organization scope**: Claims render into identities like `gha:your-org/your-repo` and groups like `gha-org:your-org`, so an ACL can trust one repository or a whole organization
 - **🎯 Job-level pinning**: Allow entries can pin extra claims (for example `sub`) so only the publish job's token is accepted
 - **🌐 Issuer-agnostic**: Issuers, audiences, claims and templates are pure configuration — no platform-specific code
-- **🛡️ Fails closed**: A token from a trusted issuer that doesn't verify gets a `401`, never anonymous access
+- **🛡️ Fails closed**: A token from a trusted issuer that doesn't verify gets a `401` with `{"error":"unauthorized","reason":"oidc token verification failed"}`, never anonymous access
 
 ---
 
@@ -122,7 +122,7 @@ verdaccio-auth-oidc lets the CI platform vouch for the job instead:
 
 - **🔒 Smaller blast radius**: A compromised pipeline can only publish what its own repository is allowed to
 - **🧹 Zero credential hygiene**: No secrets to rotate, revoke or audit across repositories
-- **🔌 Drop-in**: Runs alongside `htpasswd` or any other auth plugin — tokens it doesn't recognize pass straight through
+- **🔌 Drop-in**: Runs beside `htpasswd` or any other auth plugin — password logins and Verdaccio's own tokens are handed to Verdaccio's built-in handling unchanged
 - **⚡ Fast**: Verified identities are cached until the token expires, so a publish's many requests verify once
 
 ---
@@ -132,8 +132,8 @@ verdaccio-auth-oidc lets the CI platform vouch for the job instead:
 ### GitHub Actions — Selected Repositories
 
 ```yaml
-middlewares:
-  'verdaccio-auth-oidc':
+auth:
+  auth-oidc:
     issuers:
       - id: github-actions
         issuer: https://token.actions.githubusercontent.com
@@ -154,8 +154,8 @@ middlewares:
 Trust every repository in an organization without listing them. Scope the issuer by the owner claim, and pin the immutable owner ID so a renamed or re-registered organization can't inherit the trust:
 
 ```yaml
-middlewares:
-  'verdaccio-auth-oidc':
+auth:
+  auth-oidc:
     issuers:
       - id: github-actions
         issuer: https://token.actions.githubusercontent.com
@@ -178,8 +178,8 @@ packages:
 ### Bitbucket Pipelines — Workspace-wide
 
 ```yaml
-middlewares:
-  'verdaccio-auth-oidc':
+auth:
+  auth-oidc:
     issuers:
       - id: bitbucket-pipelines
         issuer: https://api.bitbucket.org/2.0/workspaces/your-workspace/pipelines-config/identity/oidc
@@ -195,8 +195,8 @@ middlewares:
 ### GitLab CI — Group-wide
 
 ```yaml
-middlewares:
-  'verdaccio-auth-oidc':
+auth:
+  auth-oidc:
     issuers:
       - id: gitlab
         issuer: https://gitlab.com
@@ -214,8 +214,8 @@ middlewares:
 ### Multiple Issuers
 
 ```yaml
-middlewares:
-  'verdaccio-auth-oidc':
+auth:
+  auth-oidc:
     issuers:
       - id: github-actions
         issuer: https://token.actions.githubusercontent.com
@@ -270,6 +270,8 @@ interface IssuerConfig {
   algorithms?: string[];
   /** explicit JWKS endpoint that skips discovery */
   jwksUri?: string;
+  /** whether http (not https) issuer and JWKS URLs are accepted; for loopback and tests only */
+  allowInsecureHttp?: boolean;
   /** template for the Verdaccio user name, e.g. 'gha:{repository}' */
   usernameTemplate: string;
   /** templates for the Verdaccio groups */
@@ -286,10 +288,11 @@ interface IssuerConfig {
 | Option                 | Type                                        | Default    | Description                                          |
 | ---------------------- | ------------------------------------------- | ---------- | ---------------------------------------------------- |
 | `id`                   | `string`                                    | required   | Label used in logs and errors                        |
-| `issuer`               | `string`                                    | required   | Absolute `http(s)` URL equal to the token's `iss`    |
+| `issuer`               | `string`                                    | required   | Absolute `https` URL equal to the token's `iss`      |
 | `audience`             | `string \| string[]`                        | required   | Expected `aud`; never optional                       |
 | `algorithms`           | `string[]`                                  | discovered | Accepted algorithms, capped to the safe set          |
-| `jwksUri`              | `string`                                    | discovered | Skip OIDC discovery for key lookup                   |
+| `jwksUri`              | `string`                                    | discovered | `https` JWKS URL that skips discovery for key lookup |
+| `allowInsecureHttp`    | `boolean`                                   | `false`    | Accept `http` issuer and JWKS URLs (loopback, tests) |
 | `usernameTemplate`     | `string`                                    | required   | `{claim}` placeholders rendered from verified claims |
 | `groupTemplates`       | `string[]`                                  | required   | Group templates, rendered the same way               |
 | `matchClaim`           | `string`                                    | required   | Trust-scope claim every `allow` entry must name      |
@@ -308,22 +311,39 @@ Each `allow` entry matches when **every** key matches the claim of the same name
 
 ### Startup Checks
 
-The plugin refuses to load, naming the issuer and the problem, when an issuer is missing an `id`, `audience`, `matchClaim` or templates, uses a malformed template or a non-absolute `issuer` URL, has an empty `allow` list or an entry without its `matchClaim` key, lists an unsafe algorithm, or shares its `issuer` URL with another entry.
+The plugin refuses to load, naming the issuer and the problem, when an issuer is missing an `id`, `audience`, `matchClaim` or templates, uses a malformed template or a non-absolute `issuer` URL, has an empty `allow` list or an entry without its `matchClaim` key, lists an unsafe algorithm, shares its `issuer` URL with another entry, uses an `http` `issuer` or `jwksUri` without `allowInsecureHttp: true`, or carries a key an issuer does not define. A misspelled option such as `jwks_uri` or `algorithm` is reported with the key it most resembles, so it can never fall back silently to a looser default. Keys beside `issuers` at the plugin level are left alone, since Verdaccio may merge its own settings there. The plugin's key under `auth:` must be `auth-oidc`, which Verdaccio resolves to the `verdaccio-auth-oidc` package.
+
+A failed startup logs `verdaccio-auth-oidc failed to start, stopping verdaccio: …` and exits Verdaccio with code `1` — including when the plugin sits in Verdaccio's `plugins` folder, where Verdaccio would otherwise skip a broken plugin and keep serving without it.
+
+A few settings load but log a warning at startup:
+
+- A `usernameTemplate` or `groupTemplates` entry that starts with a `{claim}` placeholder: the token's claims alone then choose the name, so a job could render a name that collides with a human user or group. Give every template a literal prefix such as `gha:` or `ci:`.
+- An `allow` entry whose `matchClaim` pattern has a wildcard in its owner part, the text before the first `/` (or anywhere, when the pattern has no `/`), such as `*`, `*/*`, `acme-*`, `acme-*/*` or `repo:*/*:ref:refs/heads/main`: it trusts owners you don't control, which on GitHub Actions or another shared issuer means any organization someone can register, such as `acme-evil`. Spell the owner out before any wildcard, such as `your-org/*` or `repo:your-org/*:ref:refs/heads/main`. The plugin still loads it, because an issuer only your organization can use, such as GitHub Enterprise Server, may trust all of its repositories.
+- `allowInsecureHttp: true` on an issuer whose `issuer` or `jwksUri` names a host other than loopback (`localhost`, `127.0.0.0/8`, `::1`): discovery and keys could then travel over plain http, where a network attacker can replace them. Use `https` for every issuer that is not on the same machine.
+- A Verdaccio major newer than 7: the hand-off to Verdaccio's core auth is set up the way 7.x sets up its own, which a later major may change. Check password logins and Verdaccio-issued tokens after upgrading.
 
 ---
 
 ## 🌐 Compatibility & Size
 
-| Requirement       | Value                                    |
-| ----------------- | ---------------------------------------- |
-| **Node.js**       | >= 22.12 (`require()` of ESM)            |
-| **Verdaccio**     | 6.x                                      |
-| **TypeScript**    | 5.x+                                     |
-| **Module format** | ESM only                                 |
-| **Plugin type**   | Verdaccio `middlewares` (Express) plugin |
-| **Dependencies**  | [`jose`](https://github.com/panva/jose)  |
+| Requirement       | Value                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| **Node.js**       | >= 22.12 (`require()` of ESM)                                                            |
+| **Verdaccio**     | 6.1.0 – 7.x (7.x needs Node.js >= 24)                                                    |
+| **TypeScript**    | 5.x+                                                                                     |
+| **Module format** | ESM only                                                                                 |
+| **Plugin type**   | Verdaccio `auth` plugin (`apiJWTmiddleware`)                                             |
+| **Dependencies**  | [`jose`](https://github.com/panva/jose), [`xception`](https://github.com/alvis/xception) |
 
-**Why a `middlewares` plugin?** Verdaccio's core auth runs first and marks any bearer token it can't verify as anonymous instead of rejecting it. Running as a middleware lets this plugin verify only tokens from configured issuers and overwrite `req.remote_user` before ACLs run, without re-implementing Verdaccio's own token handling.
+**Why an `auth` plugin?** Verdaccio's core API middleware runs before every `middlewares` plugin, and from Verdaccio 7 it answers `401` to any bearer token it didn't issue itself — so a CI token never reaches a later middleware. As an `auth` plugin providing `apiJWTmiddleware`, this plugin sees the request first: it verifies tokens whose `iss` names a configured issuer and hands every other request — password logins, Verdaccio-issued tokens, anonymous access — to Verdaccio's own core handling over your remaining auth plugins.
+
+To do that, the plugin builds a second copy of Verdaccio's core auth from the running Verdaccio install, set up the way that Verdaccio version sets up its own. Three consequences follow:
+
+- **Other auth plugins load twice** — once for Verdaccio's core and once for the hand-off — so their "loaded" log lines and any start-up side effects appear twice. API requests use the hand-off copy; `npm login` and token creation use core's.
+- **Verdaccio must be started through its own executable** (the `verdaccio` bin or the official Docker image), because the plugin finds the install from the running script. Launching through a wrapper such as PM2's script mode stops Verdaccio at startup with `OIDC_FALLBACK_UNAVAILABLE`.
+- **A startup failure ends the whole process.** Embedding Verdaccio in your own Node.js application (for example through its programmatic `runServer` API) is not supported: the plugin cannot find the install from your application's script, and its fatal exit stops your application along with Verdaccio. The hand-off copy loads its plugins asynchronously, so a failure there can arrive after Verdaccio has already bound its port; clients may briefly connect before the process exits.
+
+Verdaccio 6.0.x is not supported: its core auth is an internal implementation the plugin can't reproduce exactly, while from 6.1.0 core uses the shared `@verdaccio/auth` package.
 
 ---
 
@@ -374,7 +394,9 @@ Both scopes can coexist: an organization-wide issuer still renders the repositor
 
 ### Discovery and Key Rotation
 
-Each issuer's `jwks_uri` and signing algorithms are discovered from `{issuer}/.well-known/openid-configuration` on first use. When verification fails because a key can't be resolved, the plugin re-discovers once — rate-limited by `discoveryCooldownSeconds` — so a provider moving its JWKS heals without a restart. Failures caused by the token itself are never retried.
+Each issuer's `jwks_uri` and signing algorithms are discovered from `{issuer}/.well-known/openid-configuration` on first use. When verification fails because a key can't be resolved, the plugin re-discovers once — rate-limited by `discoveryCooldownSeconds` — so a provider moving its JWKS heals without a restart. A failed re-discovery keeps the working key source, so tokens signed with known keys still verify while its cached keys are fresh; once the JWKS endpoint itself has been unreachable past that cache (about 10 minutes), tokens are rejected until it recovers. Failures caused by the token itself are never retried.
+
+Issuer, `jwksUri` and discovered `jwks_uri` URLs must use `https`; set `allowInsecureHttp: true` only for a loopback or test issuer.
 
 ### Algorithm Safety
 
@@ -413,18 +435,23 @@ We aim to respond within 48 hours and patch as quickly as possible.
 
 ## 🛠️ Troubleshooting
 
-| Issue                                        | Solution                                                                                                      |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **CI identity shows as `$anonymous`**        | List the plugin under `middlewares:` before any other middleware that reads `req.remote_user`                 |
-| **Every publish answers 401**                | Check that `audience` matches the audience the CI job requested, and that an `allow` entry matches its claims |
-| **Plugin fails to load (`ERR_REQUIRE_ESM`)** | Upgrade to Node.js >= 22.12, which can `require()` ES modules                                                 |
-| **ACL doesn't match a mixed-case repo**      | With `matchCaseInsensitive: true` identities render in lower case — write ACL entries in lower case           |
-| **Plugin refuses to start**                  | Read the startup error — it names the issuer and the invalid field                                            |
+| Issue                                                            | Solution                                                                                                                      |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **CI token rejected as a Verdaccio token**                       | Verdaccio uses only the first auth plugin providing `apiJWTmiddleware` — remove or reorder any other plugin that provides one |
+| **Every publish answers 401**                                    | Check that `audience` matches the audience the CI job requested, and that an `allow` entry matches its claims                 |
+| **Plugin fails to load (`ERR_REQUIRE_ESM`)**                     | Upgrade to Node.js >= 22.12, which can `require()` ES modules                                                                 |
+| **ACL doesn't match a mixed-case repo**                          | With `matchCaseInsensitive: true` identities render in lower case — write ACL entries in lower case                           |
+| **Plugin refuses to start**                                      | Read the startup error — it names the issuer and the invalid field                                                            |
+| **Startup fails with `OIDC_FALLBACK_UNAVAILABLE`**               | Start Verdaccio through its own `verdaccio` executable (or the official image), and use Verdaccio 6.1.0 or later              |
+| **Warning: template has no literal prefix**                      | Prefix the template, e.g. `ci:{repository}`, so OIDC names can't collide with human users or groups                           |
+| **Warning: matchClaim pattern has a wildcard in its owner part** | Spell the owner out before any wildcard, e.g. `your-org/*`, unless only your organization can use the issuer                  |
+| **Warning: allowInsecureHttp on a non-loopback host**            | Serve the issuer and its JWKS over `https`; keep `allowInsecureHttp` for an issuer on the same machine                        |
+| **Warning: Verdaccio newer than 7.x**                            | Check that password logins and Verdaccio-issued tokens still work, and watch for a plugin release that supports the new major |
 
 ### ❓ FAQ
 
 **Does this replace my existing auth plugin?**
-No. Tokens that aren't from a configured issuer pass straight through to whatever auth Verdaccio already uses.
+No. It only claims bearer tokens from configured issuers; password logins and Verdaccio-issued tokens are handed to Verdaccio's own authentication over the other auth plugins you configure.
 
 **Which CI platforms are supported?**
 Any platform that issues OIDC ID tokens with a discoverable JWKS — GitHub Actions, GitLab CI, Bitbucket Pipelines, CircleCI, Azure DevOps and more. Support is configuration, not code.

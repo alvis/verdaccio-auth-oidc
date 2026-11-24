@@ -119,7 +119,7 @@ export async function startFakeIssuer(): Promise<FakeIssuer> {
   };
 
   /**
-   * answers discovery and JWKS requests
+   * answers discovery, JWKS and `POST /token` signing requests
    * @param request the incoming request
    * @param response the outgoing response
    */
@@ -150,6 +150,17 @@ export async function startFakeIssuer(): Promise<FakeIssuer> {
           jwks_uri: `${url}${readJwksPath()}`,
           id_token_signing_alg_values_supported: state.advertisedAlgorithms,
         });
+      case 'POST /token': {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) {
+          chunks.push(chunk as Buffer);
+        }
+        const claims = JSON.parse(
+          Buffer.concat(chunks).toString(),
+        ) as JWTPayload;
+
+        return reply(HTTP_OK, { value: await signToken(claims) });
+      }
       default:
         return reply(HTTP_NOT_FOUND, { error: 'not found' });
     }
