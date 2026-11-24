@@ -52,13 +52,18 @@
     "test:coverage": "run test:coverage --",
     "test:watch": "run test:watch --"
   },
-  "dependencies": {},
+  "dependencies": {
+    "jose": "^6.2.17",
+    "xception": "^9.1.0"
+  },
   "devDependencies": {
-    "@presetter/preset-esm": "^9.1.0",
-    "@presetter/preset-strict": "^9.1.0",
+    "@presetter/preset-esm": "10.0.0-alpha-2026-11-17-ecdaea6",
+    "@presetter/preset-essentials": "10.0.0-alpha-2026-11-17-ecdaea6",
+    "@presetter/preset-strict": "10.0.0-alpha-2026-11-17-ecdaea6",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.19.0",
     "@vitest/coverage-v8": "^5.1.0",
-    "presetter": "^9.1.0",
+    "presetter": "10.0.0-alpha-2026-11-17-ecdaea6",
     "typescript": "^5.9.0",
     "vitest": "^5.1.0"
   },
